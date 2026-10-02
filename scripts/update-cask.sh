@@ -17,6 +17,9 @@ CN_YML_URL="https://filecdn.minimax.chat/public/minimax-agent-prod/release/lates
 GLOBAL_BASE_URL="https://file.cdn.minimax.io/public/minimax-agent-prod/release"
 CN_BASE_URL="https://filecdn.minimax.chat/public/minimax-agent-prod/release"
 
+# 3.1.0 起中英文包 productName 统一为 "MiniMax Code"
+ARTIFACT_PREFIX="MiniMax%20Code"
+
 usage() {
     echo "Usage: $0 [options]"
     echo ""
@@ -49,22 +52,33 @@ log_error() {
 # Get version from latest-mac.yml
 get_latest_version() {
     local yml_url=$1
-    curl -s "$yml_url" | grep "^version:" | awk '{print $2}'
+    curl -fs "$yml_url" | grep "^version:" | awk '{print $2}'
 }
 
-# Download file and calculate sha256
+# Download file, verify sha512 against latest-mac.yml, then calculate sha256
+# (latest-mac.yml 只提供 sha512，Homebrew cask 需要 sha256)
 calculate_sha256() {
     local url=$1
+    local yml_url="${url%/*}/latest-mac.yml"
+    local file_name=$(basename "$url" | sed 's/%20/ /g')
     local tmp_file=$(mktemp)
     
-    log_info "Downloading: $url"
-    if curl -L -s -o "$tmp_file" "$url"; then
+    log_info "Downloading: $url" >&2
+    if curl -fL -s -o "$tmp_file" "$url"; then
+        local expected=$(curl -fs "$yml_url" | grep -A1 "url: ${file_name}\$" | awk '/sha512:/{print $2}')
+        local actual=$(openssl dgst -sha512 -binary "$tmp_file" | base64)
+        if [ -n "$expected" ] && [ "$expected" != "$actual" ]; then
+            rm -f "$tmp_file"
+            log_error "sha512 mismatch for $file_name" >&2
+            return 1
+        fi
+        [ -z "$expected" ] && log_warn "$file_name not found in latest-mac.yml, skip sha512 check" >&2
         local sha=$(shasum -a 256 "$tmp_file" | awk '{print $1}')
         rm -f "$tmp_file"
         echo "$sha"
     else
         rm -f "$tmp_file"
-        log_error "Failed to download: $url"
+        log_error "Failed to download: $url" >&2
         return 1
     fi
 }
@@ -88,11 +102,9 @@ update_cask() {
     # Update version
     sed -i '' "s/version \"[^\"]*\"/version \"$version\"/" "$cask_file"
     
-    # Update arm64 sha256
-    sed -i '' "/on_arm do/,/end/{s/sha256 \"[^\"]*\"/sha256 \"$sha_arm64\"/;}" "$cask_file"
-    
-    # Update intel sha256
-    sed -i '' "/on_intel do/,/end/{s/sha256 \"[^\"]*\"/sha256 \"$sha_intel\"/;}" "$cask_file"
+    # Update sha256 (format: sha256 arm: "...", intel: "...")
+    sed -i '' -E "s/(sha256 arm: +)\"[^\"]*\"/\1\"$sha_arm64\"/" "$cask_file"
+    sed -i '' -E "s/(intel: +)\"[^\"]*\"/\1\"$sha_intel\"/" "$cask_file"
     
     log_info "Updated $cask_file to version $version"
 }
@@ -114,8 +126,8 @@ update_global() {
         return 1
     fi
     
-    local arm64_url="${GLOBAL_BASE_URL}/MiniMax%20Agent-${version}-arm64.dmg"
-    local intel_url="${GLOBAL_BASE_URL}/MiniMax%20Agent-${version}.dmg"
+    local arm64_url="${GLOBAL_BASE_URL}/${ARTIFACT_PREFIX}-${version}-arm64.dmg"
+    local intel_url="${GLOBAL_BASE_URL}/${ARTIFACT_PREFIX}-${version}.dmg"
     
     local sha_arm64=$(calculate_sha256 "$arm64_url")
     local sha_intel=$(calculate_sha256 "$intel_url")
@@ -145,8 +157,8 @@ update_cn() {
         return 1
     fi
     
-    local arm64_url="${CN_BASE_URL}/MiniMax-${version}-arm64.dmg"
-    local intel_url="${CN_BASE_URL}/MiniMax-${version}.dmg"
+    local arm64_url="${CN_BASE_URL}/${ARTIFACT_PREFIX}-${version}-arm64.dmg"
+    local intel_url="${CN_BASE_URL}/${ARTIFACT_PREFIX}-${version}.dmg"
     
     local sha_arm64=$(calculate_sha256 "$arm64_url")
     local sha_intel=$(calculate_sha256 "$intel_url")
@@ -220,7 +232,7 @@ if [ "$DRY_RUN" = "false" ]; then
     echo ""
     log_info "Next steps:"
     echo "  cd $(dirname "$CASKS_DIR")"
-    echo "  git add ."
-    echo "  git commit -m \"chore: bump version to $VERSION\""
+    echo "  git add Casks/"
+    echo "  git commit -m \"chore: bump version to ${VERSION:-latest}\""
     echo "  git push"
 fi

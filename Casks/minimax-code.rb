@@ -46,10 +46,10 @@ cask "minimax-code" do
   end
 
   url "#{release_base}/MiniMax%20Code-#{version}#{arch}.dmg",
-      verified: (release_base.delete_prefix("https://").delete_suffix("release") unless overseas)
+      verified: release_base.delete_prefix("https://").delete_suffix("release")
   name "MiniMax Code"
   desc "AI agent desktop application"
-  homepage overseas ? "https://agent.minimax.io/" : "https://agent.minimax.cn/"
+  homepage "https://agent.minimax.cn/"
 
   livecheck do
     url "#{release_base}/latest-mac.yml"
@@ -57,7 +57,6 @@ cask "minimax-code" do
   end
 
   auto_updates true
-  conflicts_with cask: "minimax-agent"
   depends_on macos: :monterey
 
   app "MiniMax Code.app"

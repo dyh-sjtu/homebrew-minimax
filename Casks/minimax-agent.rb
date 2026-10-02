@@ -2,8 +2,8 @@ cask "minimax-agent" do
   arch arm: "-arm64", intel: ""
 
   version "3.1.0"
-  sha256 arm:   "f367b9997e70bd304644b2d79b2c884c5aa92abd24be1dba9b1ba0ef06f73d1d",
-         intel: "90d0354ef098da7a742d5fd549ea0ceb8da3947e132e4d6dc6c9f51216491b6d"
+  sha256 arm:   "c60099271e3eb2d76bee2c00a8095c38f4310ddeff76f3f91b53d2ec835d5514",
+         intel: "47e642049d6bbba9037960de46506d108d3c417d3337f6514d9c532015b2c9b7"
 
   on_big_sur :or_older do
     disable! date:    "2026-09-29",
@@ -21,8 +21,12 @@ cask "minimax-agent" do
     strategy :electron_builder
   end
 
+  deprecate! date:    "2026-10-02",
+             because: "has been replaced by minimax-code. Migrate with: " \
+                      "brew uninstall --cask minimax-agent && brew install --cask minimax-code --language=en"
+
   auto_updates true
-  conflicts_with cask: "minimax"
+  conflicts_with cask: "minimax-code"
   depends_on macos: :monterey
 
   app "MiniMax Code.app"
